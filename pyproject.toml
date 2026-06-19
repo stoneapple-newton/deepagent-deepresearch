@@ -8,8 +8,9 @@ dependencies = [
     "deepagents>=0.6.10",
     "langchain>=1.0,<2.0",
     "langchain-core>=1.0,<2.0",
-    "langchain-moonshot>=0.1.0",
+    "langchain-deepseek>=1.1.0",
     "langgraph>=1.0,<2.0",
     "langsmith>=0.3.0",
     "pydantic-settings>=2.14.1",
+    "tavily-python>=0.5.0",
 ]

@@ -11,15 +11,15 @@ class Settings(BaseSettings):
     )
 
     tavily_api_key: str
-    kimi_api_key: str
-    kimi_model: str = "kimi-k2.5"
+    deepseek_api_key: str
+    deepseek_model: str = "deepseek-v4-flash"
     langsmith_api_key: str
     langsmith_project: str = "deepagent_demo"
 
 
 settings = Settings()
 
-os.environ.setdefault("MOONSHOT_API_KEY", settings.kimi_api_key)
+os.environ.setdefault("DEEPSEEK_API_KEY", settings.deepseek_api_key)
 os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
 os.environ.setdefault("LANGSMITH_API_KEY", settings.langsmith_api_key)
 os.environ.setdefault("LANGSMITH_PROJECT", settings.langsmith_project)

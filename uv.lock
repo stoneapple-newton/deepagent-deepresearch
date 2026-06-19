@@ -229,10 +229,11 @@ dependencies = [
     { name = "deepagents" },
     { name = "langchain" },
     { name = "langchain-core" },
-    { name = "langchain-moonshot" },
+    { name = "langchain-deepseek" },
     { name = "langgraph" },
     { name = "langsmith" },
     { name = "pydantic-settings" },
+    { name = "tavily-python" },
 ]
 
 [package.metadata]
@@ -240,10 +241,11 @@ requires-dist = [
     { name = "deepagents", specifier = ">=0.6.10" },
     { name = "langchain", specifier = ">=1.0,<2.0" },
     { name = "langchain-core", specifier = ">=1.0,<2.0" },
-    { name = "langchain-moonshot", specifier = ">=0.1.0" },
+    { name = "langchain-deepseek", specifier = ">=1.1.0" },
     { name = "langgraph", specifier = ">=1.0,<2.0" },
     { name = "langsmith", specifier = ">=0.3.0" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
+    { name = "tavily-python", specifier = ">=0.5.0" },
 ]
 
 [[package]]
@@ -499,6 +501,19 @@ wheels = [
 ]
 
 [[package]]
+name = "langchain-deepseek"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/f4/200792013d86406aa02aba8d1b536f8877a832372702189aef0c8c7a8329/langchain_deepseek-1.1.0.tar.gz", hash = "sha256:5ec8128cabae3d71366e2f297dea2153649be317a4be7f135cfcad1160523bf6", size = 138078, upload-time = "2026-06-03T19:07:11.887Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/1a/d18b7f985c35c635503a6cd426161933ffc7785f228d92447c63b026299a/langchain_deepseek-1.1.0-py3-none-any.whl", hash = "sha256:14813cb413a97a5cce95118da253cfd64dce50537b7381b7c5d0ecf11d2a7032", size = 10061, upload-time = "2026-06-03T19:07:11.04Z" },
+]
+
+[[package]]
 name = "langchain-google-genai"
 version = "4.2.5"
 source = { registry = "https://pypi.org/simple" }
@@ -511,19 +526,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/4b/a1acdba3a86f861d379cb654f234d334c04a4c93178c8c7b0182ddeb9966/langchain_google_genai-4.2.5.tar.gz", hash = "sha256:2abab4be22699a9cc29948b2bf012946f51a0bbf10ab3a4a9a129047234829f8", size = 271850, upload-time = "2026-06-10T01:48:57.06Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/82/3d4d3dc181ea1756f323dad4d5936239c2f404ea0acb5102316224280634/langchain_google_genai-4.2.5-py3-none-any.whl", hash = "sha256:289699ddb8e1076a76144f83e25e0086e4ce629b196fc103251f2a629e0756e5", size = 69404, upload-time = "2026-06-10T01:48:56.09Z" },
-]
-
-[[package]]
-name = "langchain-moonshot"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "langchain-core" },
-    { name = "langchain-openai" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/dc/4fbcb89c06259a18eb04f9d9229e6fc938011c060b82791e6e45d85f60e1/langchain_moonshot-0.1.0.tar.gz", hash = "sha256:0d98b5ca0f707b631a138008087815990b8fc7e2cbc369205724ed5d322d056a", size = 39140, upload-time = "2026-04-07T12:34:53.261Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/2f/cfab3472126a3532ddd3f68bf37205971d3fce1a7ec5aec2194b19bf3a40/langchain_moonshot-0.1.0-py3-none-any.whl", hash = "sha256:1f62d84ae7b0dcdd544c643778149437a632acd034c7f0e9e148f55285bf5796", size = 11386, upload-time = "2026-04-07T12:34:54.207Z" },
 ]
 
 [[package]]
@@ -994,6 +996,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+]
+
+[[package]]
+name = "tavily-python"
+version = "0.7.26"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "requests" },
+    { name = "tiktoken" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/29/c2d5056dbf45a80484df5a1bf0d0ae59c611aa9680372c400a278fbf0c50/tavily_python-0.7.26.tar.gz", hash = "sha256:36202728144fce1ef0cece33800f98e3cdeb5f600e6678c50b1232b866a2f509", size = 29647, upload-time = "2026-06-10T18:38:45.231Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/c2/616ebcd49561d74c93099efa45fd5a4af2e528415f01351575980be0ba9e/tavily_python-0.7.26-py3-none-any.whl", hash = "sha256:9b9e7f2d10b3572444e13e9a3bf4f5341975d591cbc1306be04ef89a363e42a7", size = 21940, upload-time = "2026-06-10T18:38:44.127Z" },
 ]
 
 [[package]]

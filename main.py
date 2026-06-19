@@ -1,30 +1,32 @@
-from deepagents import create_deep_agent
-from langchain_moonshot import ChatMoonshot
-from langgraph.checkpoint.memory import MemorySaver
+import argparse
 
-from core.config import settings
+from agents.deep_research import (
+    DEFAULT_RESEARCH_QUERY,
+    DEFAULT_THREAD_ID,
+    run_research,
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the DeepSeek deep research agent.")
+    parser.add_argument(
+        "query",
+        nargs="*",
+        help="Research request. Defaults to the built-in LangGraph demo query.",
+    )
+    parser.add_argument(
+        "--thread-id",
+        default=DEFAULT_THREAD_ID,
+        help="Conversation thread id for Deep Agents state.",
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
-    model = ChatMoonshot(
-        model=settings.kimi_model,
-        temperature=0.6,
-        api_key=settings.kimi_api_key,
-    )
+    args = parse_args()
+    query = " ".join(args.query).strip() or DEFAULT_RESEARCH_QUERY
 
-    agent = create_deep_agent(
-        model=model,
-        system_prompt="You are a helpful assistant running on the Kimi (Moonshot) model.",
-        checkpointer=MemorySaver(),
-    )
-
-    config = {"configurable": {"thread_id": "demo-thread"}}
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": "Hello! What model are you?"}]},
-        config=config,
-    )
-
-    print(result["messages"][-1].content)
+    print(run_research(query, thread_id=args.thread_id))
 
 
 if __name__ == "__main__":
