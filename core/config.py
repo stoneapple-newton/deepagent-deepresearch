@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     tavily_api_key: str
     deepseek_api_key: str
-    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_model: str = "deepseek-v4-pro"
     langsmith_api_key: str
     langsmith_project: str = "deepagent_demo"
 

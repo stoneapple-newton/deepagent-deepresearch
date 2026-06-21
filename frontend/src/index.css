@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 8% 95%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 24 100% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 8% 96%;
+    --secondary-foreground: 0 0% 4%;
+    --muted: 45 8% 96%;
+    --muted-foreground: 0 0% 35%;
+    --accent: 24 100% 43%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 4 60% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 45 6% 82%;
+    --input: 45 6% 82%;
+    --ring: 24 100% 43%;
+    --radius: 0.625rem;
+    --sidebar-background: 45 8% 97%;
+    --sidebar-foreground: 0 0% 35%;
+    --sidebar-primary: 24 100% 43%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 24 100% 93%;
+    --sidebar-accent-foreground: 24 100% 43%;
+    --sidebar-border: 45 6% 82%;
+    --sidebar-ring: 24 100% 43%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-da-bg text-da-text font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-body;
+  }
+  .font-display {
+    font-family: "Instrument Serif", serif;
+  }
+  .font-mono {
+    font-family: "JetBrains Mono", monospace;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d0cc;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b0b0ac;
+}
+
+/* Log stream scrollbar */
+.log-stream::-webkit-scrollbar {
+  width: 4px;
+}
+.log-stream::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
+}
+
+/* Markdown report styles */
+.report-content h1 {
+  font-size: 28px;
+  font-weight: 400;
+  font-family: "Instrument Serif", serif;
+  color: #0a0a0a;
+  border-bottom: 1px solid #d0d0cc;
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+  margin-top: 32px;
+}
+.report-content h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #d95d00;
+  margin-bottom: 16px;
+  margin-top: 28px;
+}
+.report-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0a0a0a;
+  margin-bottom: 12px;
+  margin-top: 24px;
+}
+.report-content p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #0a0a0a;
+  margin-bottom: 16px;
+  max-width: 70ch;
+}
+.report-content a {
+  color: #d95d00;
+  text-decoration: none;
+}
+.report-content a:hover {
+  text-decoration: underline;
+}
+.report-content code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  background: #1a1a1a;
+  color: #f4f4f2;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.report-content pre {
+  background: #1a1a1a;
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.report-content pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+.report-content blockquote {
+  border-left: 4px solid #d95d00;
+  padding-left: 16px;
+  margin-left: 0;
+  font-style: italic;
+  color: #5a5a5a;
+}
+.report-content ul, .report-content ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+.report-content li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+.report-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+.report-content th, .report-content td {
+  border: 1px solid #d0d0cc;
+  padding: 10px 14px;
+  text-align: left;
+}
+.report-content th {
+  background: #fafaf8;
+  font-weight: 600;
+}
+.report-content tr:nth-child(even) {
+  background: #fafaf8;
+}
