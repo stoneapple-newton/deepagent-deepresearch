@@ -16,6 +16,7 @@ export default function NewResearch() {
     setResearchOptions,
     steerSession,
     loadSessions,
+    activeSessionId,
   } = useStore();
   const [query, setQuery] = useState('');
   const [threadId, setThreadId] = useState('');
@@ -30,6 +31,16 @@ export default function NewResearch() {
   const existingThreadIds = Array.from(
     new Set(sessions.map((session) => session.threadId).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const active = sessions.find((session) => session.id === activeSessionId);
+    if (active?.status === 'running' && currentSession?.id !== active.id) {
+      setCurrentSession(active);
+      setStartError(null);
+      setStartMessage('Research session resumed. Live progress will appear here.');
+    }
+  }, [activeSessionId, currentSession?.id, sessions]);
 
   useEffect(() => {
     if (!currentSession) return undefined;

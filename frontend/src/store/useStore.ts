@@ -218,12 +218,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (existing.status !== 'failed' && existing.status !== 'budget_exhausted') {
       throw new Error(`Cannot continue session with status ${existing.status}`);
     }
-    return get().createResearchSession({
-      query: existing.query,
-      threadId: existing.threadId,
-      model: existing.model,
-      maxLlmCalls: existing.maxLlmCalls,
-    });
+    const session = await api.post<ApiResearchSession>(`/sessions/${id}/continue`);
+    const mapped = mapSession(session);
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? mapped : s)),
+    }));
+    return mapped;
   },
   steerSession: async (id, message) => {
     const session = await api.post<ApiResearchSession>(`/sessions/${id}/steer`, { message });

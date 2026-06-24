@@ -325,7 +325,7 @@ export default function Sessions() {
                     className="w-full flex items-center justify-center gap-2 bg-da-orange text-white py-2.5 rounded-md text-sm font-medium hover:shadow-glow transition-all disabled:opacity-50"
                   >
                     {isContinuing ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                    {selectedSession.status === 'budget_exhausted' ? 'Continue with Same Budget' : 'Continue Research'}
+                    Continue Research
                   </button>
                 )}
 

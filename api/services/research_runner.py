@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import time
 import traceback
@@ -10,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from sqlmodel import Session
+from sqlmodel import Session, desc, select
 
 from agents.deep_research import LlmBudgetExceeded, run_research
 from api.database import engine
@@ -21,6 +20,7 @@ _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="research-")
 
 REPORTS_DIR = Path("reports")
 REPORTS_DIR.mkdir(exist_ok=True)
+RESEARCH_DIR = Path("research")
 
 PHASES = [
     ("planning", 10, "planner"),
@@ -101,6 +101,95 @@ def _word_count(report: str) -> int:
     return len(report.split())
 
 
+def _score_candidate_file(path: Path, query_terms: set[str]) -> tuple[int, float]:
+    parts = set(re.findall(r"[a-z0-9]+", path.as_posix().lower()))
+    overlap = len(parts & query_terms)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return overlap, mtime
+
+
+def _detect_research_files(query: str, *, limit: int = 12) -> list[str]:
+    if not RESEARCH_DIR.exists():
+        return []
+
+    query_terms = {
+        term
+        for term in re.findall(r"[a-z0-9]+", query.lower())
+        if len(term) >= 3
+    }
+    files = [
+        path
+        for path in RESEARCH_DIR.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".md", ".txt", ".json"}
+    ]
+    ranked = sorted(
+        files,
+        key=lambda path: _score_candidate_file(path, query_terms),
+        reverse=True,
+    )
+    return [path.as_posix() for path in ranked[:limit]]
+
+
+def _latest_failure_message(db: Session, session_id: str) -> str:
+    log = db.exec(
+        select(LogEntry)
+        .where(LogEntry.session_id == session_id)
+        .where(LogEntry.phase == "failed")
+        .order_by(desc(LogEntry.timestamp))
+    ).first()
+    if log is None:
+        return "No prior failure log was recorded."
+    message = log.message.strip()
+    return message[:1500] if message else "Prior failure log was empty."
+
+
+def _build_resume_query(
+    *,
+    session_id: str,
+    query: str,
+    previous_status: str | None,
+    previous_llm_calls: int | None,
+    max_llm_calls: int,
+) -> str:
+    with Session(engine) as db:
+        session = db.get(ResearchSession, session_id)
+        failure_message = _latest_failure_message(db, session_id)
+        report_path = session.report_path if session and session.report_path else None
+
+    files = _detect_research_files(query)
+    file_lines = "\n".join(f"- /{path}" for path in files) or "- No existing research files detected."
+    report_line = f"\nExisting report path, if useful: /{report_path}" if report_path else ""
+    previous_call_text = (
+        str(previous_llm_calls) if previous_llm_calls is not None else "unknown"
+    )
+    previous_status_text = previous_status or "unknown"
+
+    return f"""Continue the original research request using existing progress.
+
+Original request:
+{query}
+
+Resume context:
+- Previous status: {previous_status_text}
+- Previous LLM calls used: {previous_call_text}
+- Fresh LLM call budget for this attempt: {max_llm_calls}
+- Previous failure: {failure_message}{report_line}
+
+Existing candidate research files under /research:
+{file_lines}
+
+Instructions for this continuation:
+- Inspect existing /research notes and any report drafts first.
+- Reuse prior findings, todos, searches, source audits, and draft sections.
+- Avoid repeating completed searches unless verification, freshness, or contradiction resolution requires it.
+- Fill only the remaining gaps, then produce and save the final Markdown report.
+- Keep citations close to the claims they support and finish with the saved report path plus key takeaways.
+"""
+
+
 async def start_research(
     session_id: str,
     query: str,
@@ -108,6 +197,9 @@ async def start_research(
     *,
     max_llm_calls: int,
     model_name: str | None = None,
+    resume: bool = False,
+    previous_status: str | None = None,
+    previous_llm_calls: int | None = None,
 ) -> None:
     """Run research in the background and emit SSE events."""
     start_time = time.time()
@@ -120,6 +212,7 @@ async def start_research(
         session.status = "running"
         session.phase = "planning"
         session.progress = 0
+        session.llm_calls_used = 0
         session.max_llm_calls = max_llm_calls
         session.model = model_name or session.model
         session.updated_at = datetime.utcnow()
@@ -172,10 +265,20 @@ async def start_research(
                 ),
             )
 
+        run_query = query
+        if resume:
+            run_query = _build_resume_query(
+                session_id=session_id,
+                query=query,
+                previous_status=previous_status,
+                previous_llm_calls=previous_llm_calls,
+                max_llm_calls=max_llm_calls,
+            )
+
         report = await loop.run_in_executor(
             _executor,
             lambda: run_research(
-                query,
+                run_query,
                 thread_id=thread_id,
                 model_name=model_name,
                 max_llm_calls=max_llm_calls,

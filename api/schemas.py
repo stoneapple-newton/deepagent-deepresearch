@@ -72,6 +72,10 @@ class ResearchSessionCreate(ResearchSessionBase):
     tags: list[str] | None = None
 
 
+class ResearchSessionContinue(BaseModel):
+    max_llm_calls: int | None = None
+
+
 class ResearchSessionUpdate(BaseModel):
     status: str | None = None
     phase: str | None = None

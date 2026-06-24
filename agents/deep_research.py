@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date
+import os
+from pathlib import Path
+import sqlite3
 from typing import Any
 
 from deepagents import create_deep_agent
@@ -10,7 +13,7 @@ from langchain.tools import tool
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from tools.report_quality import assess_research_report
 from tools.search import internet_search
@@ -24,6 +27,12 @@ DEFAULT_THREAD_ID = "deep-research-demo"
 DEFAULT_SKILL_PATHS = ["./.agents/skills/"]
 REPORT_ROOT = "/reports"
 WORKSPACE_ROOT = "/research"
+CHECKPOINT_DB_PATH = Path("deepagent_checkpoints.sqlite")
+
+os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK", "true")
+
+_checkpoint_connection = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
+_checkpoint_saver = SqliteSaver(_checkpoint_connection)
 
 
 def today_iso() -> str:
@@ -226,7 +235,7 @@ def build_deep_research_agent(
         system_prompt=build_research_instructions(current_date),
         backend=FilesystemBackend(root_dir=root_dir, virtual_mode=True),
         skills=skill_paths or DEFAULT_SKILL_PATHS,
-        checkpointer=MemorySaver(),
+        checkpointer=_checkpoint_saver,
     )
 
 

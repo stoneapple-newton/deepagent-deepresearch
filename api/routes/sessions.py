@@ -117,6 +117,67 @@ async def steer_session(
     return _to_response(db, session)
 
 
+@router.post("/sessions/{session_id}/continue")
+async def continue_session(
+    session_id: str,
+    payload: schemas.ResearchSessionContinue | None = None,
+    db: Session = Depends(get_db_session),
+) -> schemas.ResearchSessionResponse:
+    session = db.get(ResearchSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status not in {"failed", "budget_exhausted"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot continue session with status {session.status}",
+        )
+
+    previous_status = session.status
+    previous_llm_calls = session.llm_calls_used
+    max_llm_calls = max(1, payload.max_llm_calls) if payload and payload.max_llm_calls else session.max_llm_calls
+
+    session.status = "running"
+    session.phase = "planning"
+    session.progress = 0
+    session.llm_calls_used = 0
+    session.max_llm_calls = max_llm_calls
+    session.completed_at = None
+    session.updated_at = datetime.utcnow()
+
+    log = LogEntry(
+        id=uuid.uuid4().hex,
+        session_id=session_id,
+        agent="operator",
+        phase="planning",
+        message=(
+            "Continuing failed research in place. "
+            f"Previous status: {previous_status}; previous LLM calls: "
+            f"{previous_llm_calls}/{max_llm_calls}."
+        ),
+    )
+    db.add(log)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    broadcaster.delete_queue(session_id)
+    broadcaster.create_queue(session_id)
+    asyncio.create_task(
+        research_runner.start_research(
+            session_id,
+            session.query,
+            session.thread_id,
+            max_llm_calls=max_llm_calls,
+            model_name=session.model,
+            resume=True,
+            previous_status=previous_status,
+            previous_llm_calls=previous_llm_calls,
+        )
+    )
+
+    return _to_response(db, session)
+
+
 @router.get("/sessions/{session_id}")
 def get_research_session(
     session_id: str, db: Session = Depends(get_db_session)

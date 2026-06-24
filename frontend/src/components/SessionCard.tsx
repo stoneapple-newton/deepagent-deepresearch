@@ -149,7 +149,7 @@ export default function SessionCard({ session, expanded = false, onView }: Sessi
               }}
               disabled={isContinuing}
               className="p-1.5 rounded-md hover:bg-da-orange/10 text-da-text-secondary hover:text-da-orange transition-colors disabled:opacity-50"
-              title={session.status === 'budget_exhausted' ? 'Continue with same budget' : 'Continue research'}
+              title="Continue research"
             >
               {isContinuing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
             </button>
