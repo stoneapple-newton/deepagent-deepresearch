@@ -4,6 +4,7 @@ import asyncio
 import os
 import re
 import time
+import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -251,6 +252,8 @@ async def start_research(
             },
         )
     except Exception as exc:  # noqa: BLE001
+        error_message = f"Research failed: {exc!s}"
+        full_traceback = traceback.format_exc()
         with Session(engine) as db:
             session = db.get(ResearchSession, session_id)
             if session is None:
@@ -263,9 +266,18 @@ async def start_research(
                 session_id,
                 "deep_research_agent",
                 "failed",
-                f"Research failed: {exc!s}",
+                error_message,
+            )
+            # Also log the traceback as a separate log entry for debugging.
+            _add_log(
+                db,
+                session_id,
+                "deep_research_agent",
+                "failed",
+                full_traceback,
             )
             db.add(session)
             db.commit()
 
+        print(full_traceback)
         await broadcaster.emit(session_id, {"type": "error", "error": str(exc)})

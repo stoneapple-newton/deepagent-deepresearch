@@ -6,7 +6,7 @@ import LogStream from '@/components/LogStream';
 import AgentPipeline from '@/components/AgentPipeline';
 import { subscribeToSession } from '@/api/client';
 import type { LogEntry, ResearchSession, SessionStatus } from '@/types';
-import { Loader2, Search, RefreshCw, X, FileText, Send } from 'lucide-react';
+import { Loader2, Search, RefreshCw, X, FileText, Send, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -25,7 +25,7 @@ const sortOptions = [
 
 export default function Sessions() {
   const { sessions, getSession, updateSession } = useStore();
-  const { loadSessions, steerSession } = useStore();
+  const { loadSessions, steerSession, continueSession, setCurrentPage, setActiveSessionId } = useStore();
   const [filter, setFilter] = useState<SessionStatus | 'all'>('all');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,6 +34,7 @@ export default function Sessions() {
   const [steering, setSteering] = useState('');
   const [isSteering, setIsSteering] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isContinuing, setIsContinuing] = useState(false);
   const runningSessionIds = sessions
     .filter((session) => session.status === 'running')
     .map((session) => session.id)
@@ -307,6 +308,27 @@ export default function Sessions() {
                   </div>
                 )}
 
+                {(selectedSession.status === 'failed' || selectedSession.status === 'budget_exhausted') && (
+                  <button
+                    onClick={async () => {
+                      setIsContinuing(true);
+                      try {
+                        const continued = await continueSession(selectedSession.id);
+                        setDetailSession(null);
+                        setActiveSessionId(continued.id);
+                        setCurrentPage('new-research');
+                      } finally {
+                        setIsContinuing(false);
+                      }
+                    }}
+                    disabled={isContinuing}
+                    className="w-full flex items-center justify-center gap-2 bg-da-orange text-white py-2.5 rounded-md text-sm font-medium hover:shadow-glow transition-all disabled:opacity-50"
+                  >
+                    {isContinuing ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                    {selectedSession.status === 'budget_exhausted' ? 'Continue with Same Budget' : 'Continue Research'}
+                  </button>
+                )}
+
                 {selectedSession.status === 'completed' && selectedSession.report && (
                   <button
                     onClick={() => {
@@ -322,7 +344,7 @@ export default function Sessions() {
               </div>
 
               {/* Right: Logs or Report */}
-              <div className="lg:w-3/5 overflow-hidden">
+              <div className="lg:w-3/5 h-full overflow-hidden">
                 {selectedSession.status === 'completed' && selectedSession.report ? (
                   <div className="h-full overflow-y-auto p-6">
                     <div className="whitespace-pre-wrap font-body text-sm text-da-text">

@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import type { ResearchSession } from '@/types';
-import { CheckCircle, AlertCircle, Clock, Loader2, ArrowRight, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Clock, Loader2, ArrowRight, X, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -19,7 +20,8 @@ const statusConfig = {
 };
 
 export default function SessionCard({ session, expanded = false, onView }: SessionCardProps) {
-  const { setActiveSessionId, setCurrentPage, removeSession } = useStore();
+  const { setActiveSessionId, setCurrentPage, removeSession, continueSession } = useStore();
+  const [isContinuing, setIsContinuing] = useState(false);
   const status = statusConfig[session.status];
   const StatusIcon = status.icon;
 
@@ -119,18 +121,39 @@ export default function SessionCard({ session, expanded = false, onView }: Sessi
       {/* Bottom row */}
       <div className="flex items-center justify-between pt-3 border-t border-da-border-color/50">
         <div className="flex items-center gap-4 text-xs text-da-text-secondary">
-          {session.sourceCount !== undefined && (
+          {session.sourceCount != null && (
             <span>{session.sourceCount} sources</span>
           )}
-          {session.wordCount !== undefined && (
+          {session.wordCount != null && (
             <span>{session.wordCount.toLocaleString()} words</span>
           )}
-          {session.duration !== undefined && (
+          {session.duration != null && (
             <span>{Math.round(session.duration / 60)}m</span>
           )}
           <span>{session.llmCallsUsed}/{session.maxLlmCalls} calls</span>
         </div>
         <div className="flex items-center gap-2">
+          {(session.status === 'failed' || session.status === 'budget_exhausted') && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (isContinuing) return;
+                setIsContinuing(true);
+                try {
+                  const continued = await continueSession(session.id);
+                  setActiveSessionId(continued.id);
+                  setCurrentPage('new-research');
+                } finally {
+                  setIsContinuing(false);
+                }
+              }}
+              disabled={isContinuing}
+              className="p-1.5 rounded-md hover:bg-da-orange/10 text-da-text-secondary hover:text-da-orange transition-colors disabled:opacity-50"
+              title={session.status === 'budget_exhausted' ? 'Continue with same budget' : 'Continue research'}
+            >
+              {isContinuing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

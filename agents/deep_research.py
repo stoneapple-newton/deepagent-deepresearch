@@ -64,16 +64,14 @@ class LlmBudgetCallback(BaseCallbackHandler):
 def build_deepseek_model(
     *,
     model_name: str | None = None,
-    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> BaseChatModel:
     from core.config import settings
 
-    model = ChatDeepSeek(
+    return ChatDeepSeek(
         model=model_name or settings.deepseek_model,
         temperature=0.2,
         api_key=settings.deepseek_api_key,
     )
-    return model.with_config(callbacks=callbacks) if callbacks else model
 
 
 def build_research_subagents(current_date: str | None = None) -> list[dict[str, Any]]:
@@ -211,7 +209,7 @@ def build_deep_research_agent(
     steering_reader: Callable[[], str] | None = None,
 ):
     current_date = current_date or today_iso()
-    model = model or build_deepseek_model(model_name=model_name, callbacks=callbacks)
+    model = model or build_deepseek_model(model_name=model_name)
 
     @tool
     def check_steering() -> str:
@@ -252,8 +250,11 @@ def run_research(
         callbacks=callbacks,
         steering_reader=steering_reader,
     )
+    config = {"configurable": {"thread_id": thread_id}}
+    if callbacks:
+        config["callbacks"] = callbacks
     result = agent.invoke(
         {"messages": [{"role": "user", "content": query}]},
-        config={"configurable": {"thread_id": thread_id}},
+        config=config,
     )
     return result["messages"][-1].content

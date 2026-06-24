@@ -79,6 +79,7 @@ interface AppState {
     maxLlmCalls: number;
     tags?: string[];
   }) => Promise<ResearchSession>;
+  continueSession: (id: string) => Promise<ResearchSession>;
   steerSession: (id: string, message: string) => Promise<void>;
   addSession: (session: ResearchSession) => void;
   updateSession: (id: string, updates: Partial<ResearchSession>) => void;
@@ -208,6 +209,21 @@ export const useStore = create<AppState>((set, get) => ({
     const mapped = mapSession(session);
     set((state) => ({ sessions: [mapped, ...state.sessions] }));
     return mapped;
+  },
+  continueSession: async (id) => {
+    const existing = get().getSession(id);
+    if (!existing) {
+      throw new Error(`Session ${id} not found`);
+    }
+    if (existing.status !== 'failed' && existing.status !== 'budget_exhausted') {
+      throw new Error(`Cannot continue session with status ${existing.status}`);
+    }
+    return get().createResearchSession({
+      query: existing.query,
+      threadId: existing.threadId,
+      model: existing.model,
+      maxLlmCalls: existing.maxLlmCalls,
+    });
   },
   steerSession: async (id, message) => {
     const session = await api.post<ApiResearchSession>(`/sessions/${id}/steer`, { message });
