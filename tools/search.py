@@ -1,9 +1,19 @@
-from typing import Literal
+import logging
+import random
+import time
+from typing import Any, Literal
 
 from langchain.tools import tool
+import requests
 from tavily import TavilyClient
+from urllib3 import exceptions as urllib3_exceptions
+
+logger = logging.getLogger(__name__)
 
 _tavily_client: TavilyClient | None = None
+_SEARCH_MAX_ATTEMPTS = 3
+_SEARCH_BACKOFF_SECONDS = 0.25
+_SEARCH_JITTER_SECONDS = 0.1
 
 
 def _get_tavily_client() -> TavilyClient:
@@ -14,6 +24,85 @@ def _get_tavily_client() -> TavilyClient:
 
         _tavily_client = TavilyClient(api_key=settings.tavily_api_key)
     return _tavily_client
+
+
+def _http_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code is None:
+        status_code = getattr(exc, "status_code", None)
+    try:
+        return int(status_code) if status_code is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_transient_search_error(exc: Exception) -> bool:
+    if isinstance(
+        exc,
+        (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            urllib3_exceptions.ProtocolError,
+            urllib3_exceptions.ReadTimeoutError,
+        ),
+    ):
+        return True
+
+    status_code = _http_status_code(exc)
+    return status_code == 429 or (status_code is not None and 500 <= status_code <= 599)
+
+
+def _recoverable_search_error(
+    *,
+    query: str,
+    attempts: int,
+    exc: Exception,
+) -> dict[str, Any]:
+    error: dict[str, Any] = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "attempts": attempts,
+        "recoverable": True,
+    }
+    status_code = _http_status_code(exc)
+    if status_code is not None:
+        error["status_code"] = status_code
+    return {"query": query, "results": [], "error": error}
+
+
+def _search_with_retries(client: TavilyClient, **search_kwargs: Any) -> dict[str, Any]:
+    query = str(search_kwargs.get("query", ""))
+    for attempt in range(1, _SEARCH_MAX_ATTEMPTS + 1):
+        try:
+            return client.search(**search_kwargs)
+        except Exception as exc:
+            if not _is_transient_search_error(exc):
+                raise
+
+            if attempt >= _SEARCH_MAX_ATTEMPTS:
+                logger.error(
+                    "Tavily search failed after %s attempts for query %r: %s: %s",
+                    attempt,
+                    query,
+                    type(exc).__name__,
+                    exc,
+                )
+                return _recoverable_search_error(query=query, attempts=attempt, exc=exc)
+
+            logger.warning(
+                "Tavily search failed on attempt %s/%s for query %r; retrying: %s: %s",
+                attempt,
+                _SEARCH_MAX_ATTEMPTS,
+                query,
+                type(exc).__name__,
+                exc,
+            )
+            delay = (_SEARCH_BACKOFF_SECONDS * (2 ** (attempt - 1))) + random.uniform(
+                0,
+                _SEARCH_JITTER_SECONDS,
+            )
+            time.sleep(delay)
 
 
 @tool
@@ -50,7 +139,8 @@ def internet_search(
     if max_results < 1 or max_results > 10:
         raise ValueError("max_results must be between 1 and 10")
 
-    return _get_tavily_client().search(
+    return _search_with_retries(
+        _get_tavily_client(),
         query=query,
         max_results=max_results,
         search_depth=search_depth,

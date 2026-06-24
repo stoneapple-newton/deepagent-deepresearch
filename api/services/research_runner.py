@@ -252,7 +252,7 @@ async def start_research(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        error_message = f"Research failed: {exc!s}"
+        error_message = f"Unexpected research failure: {type(exc).__name__}: {exc!s}"
         full_traceback = traceback.format_exc()
         with Session(engine) as db:
             session = db.get(ResearchSession, session_id)
