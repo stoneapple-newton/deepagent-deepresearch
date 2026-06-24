@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-v4-pro"
     langsmith_api_key: str
     langsmith_project: str = "deepagent_demo"
+    database_url: str = "sqlite:///deepagent.db"
 
 
 settings = Settings()

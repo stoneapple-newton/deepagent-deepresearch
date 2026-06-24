@@ -14,6 +14,7 @@ const statusConfig = {
   running: { icon: Loader2, color: 'text-da-orange', bg: 'bg-da-orange/10', label: 'Running' },
   completed: { icon: CheckCircle, color: 'text-da-success', bg: 'bg-da-success/10', label: 'Completed' },
   failed: { icon: AlertCircle, color: 'text-da-error', bg: 'bg-da-error/10', label: 'Failed' },
+  budget_exhausted: { icon: AlertCircle, color: 'text-da-warning', bg: 'bg-da-warning/10', label: 'Budget Exhausted' },
   pending: { icon: Clock, color: 'text-da-warning', bg: 'bg-da-warning/10', label: 'Pending' },
 };
 
@@ -127,6 +128,7 @@ export default function SessionCard({ session, expanded = false, onView }: Sessi
           {session.duration !== undefined && (
             <span>{Math.round(session.duration / 60)}m</span>
           )}
+          <span>{session.llmCallsUsed}/{session.maxLlmCalls} calls</span>
         </div>
         <div className="flex items-center gap-2">
           <button

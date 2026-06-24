@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
+from langchain.tools import tool
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.memory import MemorySaver
@@ -27,14 +30,50 @@ def today_iso() -> str:
     return date.today().isoformat()
 
 
-def build_deepseek_model() -> ChatDeepSeek:
+class LlmBudgetExceeded(RuntimeError):
+    """Raised when a research session exhausts its model-call budget."""
+
+
+class LlmBudgetCallback(BaseCallbackHandler):
+    def __init__(
+        self,
+        *,
+        max_calls: int,
+        on_usage: Callable[[int, int], None] | None = None,
+    ) -> None:
+        self.max_calls = max_calls
+        self.calls_used = 0
+        self.on_usage = on_usage
+
+    def _increment(self) -> None:
+        if self.calls_used >= self.max_calls:
+            raise LlmBudgetExceeded(
+                f"LLM call budget exhausted before call {self.calls_used + 1}/{self.max_calls}"
+            )
+        self.calls_used += 1
+        if self.on_usage is not None:
+            self.on_usage(self.calls_used, self.max_calls)
+
+    def on_chat_model_start(self, *args: Any, **kwargs: Any) -> Any:
+        self._increment()
+
+    def on_llm_start(self, *args: Any, **kwargs: Any) -> Any:
+        self._increment()
+
+
+def build_deepseek_model(
+    *,
+    model_name: str | None = None,
+    callbacks: list[BaseCallbackHandler] | None = None,
+) -> BaseChatModel:
     from core.config import settings
 
-    return ChatDeepSeek(
-        model=settings.deepseek_model,
+    model = ChatDeepSeek(
+        model=model_name or settings.deepseek_model,
         temperature=0.2,
         api_key=settings.deepseek_api_key,
     )
+    return model.with_config(callbacks=callbacks) if callbacks else model
 
 
 def build_research_subagents(current_date: str | None = None) -> list[dict[str, Any]]:
@@ -119,6 +158,7 @@ in files, and produce polished Markdown reports saved to disk.
 - write_todos: Plan and update multi-step research work.
 - ls, read_file, write_file, edit_file, glob, grep: Manage research files.
 - assess_research_report: Check report structure, citations, and obvious gaps.
+- check_steering: Check for operator guidance added from the frontend.
 
 ## Required workflow
 
@@ -137,6 +177,15 @@ in files, and produce polished Markdown reports saved to disk.
 9. Save the final report under {REPORT_ROOT}/<kebab-case-topic>.md.
 10. Return the saved report path and 3-5 key takeaways to the user.
 
+## Budget and steering
+
+- Treat the session LLM-call budget as a hard limit.
+- If the budget is low, reduce subquestions, avoid optional critic passes, and
+  write the best available report before the limit is reached.
+- Call check_steering after planning, after delegated research, and before final
+  writing. Incorporate new operator guidance unless it conflicts with the
+  original request or research standards.
+
 ## Research standards
 
 - Prefer primary sources, official documentation, academic papers, government
@@ -154,17 +203,27 @@ Use the deep-research skill when the task involves research methodology."""
 def build_deep_research_agent(
     *,
     model: BaseChatModel | None = None,
+    model_name: str | None = None,
+    callbacks: list[BaseCallbackHandler] | None = None,
     root_dir: str = ".",
     skill_paths: list[str] | None = None,
     current_date: str | None = None,
+    steering_reader: Callable[[], str] | None = None,
 ):
     current_date = current_date or today_iso()
-    model = model or build_deepseek_model()
+    model = model or build_deepseek_model(model_name=model_name, callbacks=callbacks)
+
+    @tool
+    def check_steering() -> str:
+        """Return new operator steering instructions for the active research session."""
+        if steering_reader is None:
+            return "No new steering instructions."
+        return steering_reader() or "No new steering instructions."
 
     return create_deep_agent(
         name="deep-research-agent",
         model=model,
-        tools=[internet_search, assess_research_report],
+        tools=[internet_search, assess_research_report, check_steering],
         subagents=build_research_subagents(current_date),
         system_prompt=build_research_instructions(current_date),
         backend=FilesystemBackend(root_dir=root_dir, virtual_mode=True),
@@ -178,8 +237,21 @@ def run_research(
     *,
     thread_id: str = DEFAULT_THREAD_ID,
     agent=None,
+    model_name: str | None = None,
+    max_llm_calls: int | None = None,
+    on_budget_usage: Callable[[int, int], None] | None = None,
+    steering_reader: Callable[[], str] | None = None,
 ) -> str:
-    agent = agent or build_deep_research_agent()
+    callbacks: list[BaseCallbackHandler] | None = None
+    if max_llm_calls is not None:
+        callbacks = [
+            LlmBudgetCallback(max_calls=max(1, max_llm_calls), on_usage=on_budget_usage)
+        ]
+    agent = agent or build_deep_research_agent(
+        model_name=model_name,
+        callbacks=callbacks,
+        steering_reader=steering_reader,
+    )
     result = agent.invoke(
         {"messages": [{"role": "user", "content": query}]},
         config={"configurable": {"thread_id": thread_id}},

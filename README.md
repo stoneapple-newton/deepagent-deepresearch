@@ -21,6 +21,28 @@ Install dependencies:
 uv sync
 ```
 
+## Start the backend
+
+Run the FastAPI server from the repo root:
+
+```bash
+uv run uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The frontend expects the backend to be available at `http://127.0.0.1:8000`.
+
+## Start the frontend
+
+Run the Vite app from the `frontend/` directory:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The dev server runs on `http://localhost:3000` and proxies `/api` requests to the backend.
+
 ## Run
 
 Run the default LangGraph research demo:

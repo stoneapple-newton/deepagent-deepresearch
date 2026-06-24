@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
@@ -19,8 +20,17 @@ const pageComponents = {
 };
 
 export default function App() {
-  const { currentPage } = useStore();
+  const { currentPage, loadSessions, loadAgents, addNotification } = useStore();
   const PageComponent = pageComponents[currentPage] || Dashboard;
+
+  useEffect(() => {
+    loadSessions().catch(() => {
+      addNotification({ type: 'error', message: 'Failed to load research sessions' });
+    });
+    loadAgents().catch(() => {
+      addNotification({ type: 'error', message: 'Failed to load agent settings' });
+    });
+  }, [addNotification, loadAgents, loadSessions]);
 
   return (
     <div className="min-h-screen bg-da-bg flex">

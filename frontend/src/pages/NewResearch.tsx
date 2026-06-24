@@ -1,233 +1,204 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AgentPipeline from '@/components/AgentPipeline';
 import LogStream from '@/components/LogStream';
-import type { ResearchSession, LogEntry, ResearchPhase } from '@/types';
-import { ArrowRight, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-const PHASES: ResearchPhase[] = ['planning', 'researching', 'auditing', 'writing', 'checking', 'completed'];
-
-const MOCK_LOGS: Record<string, string[]> = {
-  planning: [
-    'Analyzing research query and decomposing into sub-questions...',
-    'Generated 5 sub-questions for investigation',
-    'Planning phase complete. Handing off to researcher.',
-  ],
-  researching: [
-    'Searching for primary sources and recent publications...',
-    'Found 15 relevant sources. Processing key findings...',
-    'Extracting structured data from academic papers...',
-    'Cross-referencing facts across multiple sources...',
-    'Searching for comparative analysis data...',
-    'Found 12 additional authoritative sources.',
-    'Processing technical documentation...',
-  ],
-  auditing: [
-    'Reviewing source credibility and publisher reputation...',
-    'Checking publication dates for freshness...',
-    'Identifying potential bias in 2 sources...',
-    'Verifying factual claims against primary data...',
-    'Source audit complete. 22 of 24 sources approved.',
-  ],
-  writing: [
-    'Synthesizing findings into structured report...',
-    'Writing executive summary...',
-    'Creating comparison tables...',
-    'Drafting methodology section...',
-    'Composing conclusion and recommendations...',
-    'Report draft complete. Sending for quality check.',
-  ],
-  checking: [
-    'Evaluating report completeness against original query...',
-    'Verifying factual accuracy of all claims...',
-    'Checking structure and readability...',
-    'Assessing objectivity and tone balance...',
-    'Quality check passed. Report finalized.',
-  ],
-};
+import { subscribeToSession } from '@/api/client';
+import type { LogEntry, ResearchSession } from '@/types';
+import { ArrowRight, ChevronDown, ChevronUp, Loader2, Send } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function NewResearch() {
-  const { addSession, updateSession, setActiveSessionId, researchOptions, setResearchOptions } = useStore();
+  const {
+    createResearchSession,
+    updateSession,
+    setActiveSessionId,
+    researchOptions,
+    setResearchOptions,
+    steerSession,
+    loadSessions,
+  } = useStore();
   const [query, setQuery] = useState('');
   const [threadId, setThreadId] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [currentSession, setCurrentSession] = useState<ResearchSession | null>(null);
-  const [currentPhase, setCurrentPhase] = useState<ResearchPhase>('planning');
-  const [progress, setProgress] = useState(0);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [steering, setSteering] = useState('');
+  const [isSteering, setIsSteering] = useState(false);
+  const [startMessage, setStartMessage] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const sessions = useStore((state) => state.sessions);
+  const existingThreadIds = Array.from(
+    new Set(sessions.map((session) => session.threadId).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
 
-  const simulateResearch = async (session: ResearchSession) => {
-    let logId = 0;
-    const allLogs: LogEntry[] = [];
+  useEffect(() => {
+    if (!currentSession) return undefined;
 
-    for (let i = 0; i < PHASES.length - 1; i++) {
-      const phase = PHASES[i];
-      setCurrentPhase(phase);
-      updateSession(session.id, { phase, progress: Math.round((i / (PHASES.length - 1)) * 100) });
-      setProgress(Math.round((i / (PHASES.length - 1)) * 100));
-
-      const phaseLogs = MOCK_LOGS[phase] || [`Starting ${phase} phase...`];
-      for (const message of phaseLogs) {
-        await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200));
+    return subscribeToSession(currentSession.id, {
+      onPhase: (phase) => updateSession(currentSession.id, { phase: phase as ResearchSession['phase'] }),
+      onProgress: (progress) => updateSession(currentSession.id, { progress }),
+      onBudget: (payload) =>
+        updateSession(currentSession.id, {
+          llmCallsUsed: payload.llm_calls_used,
+          maxLlmCalls: payload.max_llm_calls,
+        }),
+      onLog: (log) => {
         const entry: LogEntry = {
-          id: `log-${++logId}`,
-          timestamp: new Date(),
-          agent: phase === 'planning' ? 'planner' : phase === 'researching' ? 'web_researcher' : phase === 'auditing' ? 'source_auditor' : phase === 'writing' ? 'report_writer' : 'quality_checker',
-          phase,
-          message,
+          id: `live-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
+          agent: log.agent,
+          phase: log.phase as ResearchSession['phase'],
+          message: log.message,
         };
-        allLogs.push(entry);
-        setLogs([...allLogs]);
-        updateSession(session.id, { logs: [...allLogs] });
-      }
-    }
-
-    // Complete
-    await new Promise((r) => setTimeout(r, 500));
-    setCurrentPhase('completed');
-    setProgress(100);
-    updateSession(session.id, {
-      status: 'completed',
-      phase: 'completed',
-      progress: 100,
-      completedAt: new Date(),
-      sourceCount: 22 + Math.floor(Math.random() * 10),
-      wordCount: 2500 + Math.floor(Math.random() * 2000),
-      duration: 1200 + Math.floor(Math.random() * 1800),
-      logs: allLogs,
-      phaseTimes: {
-        planning: 120,
-        researching: 600,
-        auditing: 300,
-        writing: 500,
-        checking: 200,
-        completed: 0,
-        failed: 0,
+        updateSession(currentSession.id, {
+          logs: [...(useStore.getState().getSession(currentSession.id)?.logs || []), entry],
+        });
+      },
+      onCompleted: (payload) => {
+        updateSession(currentSession.id, {
+          status: 'completed',
+          phase: 'completed',
+          progress: 100,
+          sourceCount: payload.source_count,
+          wordCount: payload.word_count,
+          duration: payload.duration,
+        });
+        loadSessions().catch(() => undefined);
+      },
+      onError: (message) => {
+        updateSession(currentSession.id, {
+          status: message.toLowerCase().includes('budget') ? 'budget_exhausted' : 'failed',
+          phase: 'failed',
+        });
+      },
+      onSteering: () => {
+        loadSessions().catch(() => undefined);
       },
     });
-  };
+  }, [currentSession, loadSessions, updateSession]);
 
   const handleSubmit = async () => {
     if (!query.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
-
-    const session: ResearchSession = {
-      id: `sess-${Date.now()}`,
-      threadId: threadId.trim() || `research-${Date.now()}`,
-      query: query.trim(),
-      status: 'running',
-      phase: 'planning',
-      progress: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      logs: [],
-      tags: [],
-    };
-
-    addSession(session);
-    setActiveSessionId(session.id);
-    setCurrentSession(session);
-    setSubmitted(true);
-    setIsSubmitting(false);
-    setLogs([]);
-
-    // Start simulation
-    simulateResearch(session);
+    setStartError(null);
+    setStartMessage('Creating research session...');
+    try {
+      const session = await createResearchSession({
+        query: query.trim(),
+        threadId: threadId.trim() || undefined,
+        model: researchOptions.model,
+        maxLlmCalls: researchOptions.maxLlmCalls,
+      });
+      setActiveSessionId(session.id);
+      setCurrentSession(session);
+      setStartMessage('Research session started. Live progress will appear here.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start research session.';
+      setStartError(message);
+      setStartMessage(null);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  if (submitted && currentSession) {
+  const handleSteer = async () => {
+    if (!currentSession || !steering.trim() || isSteering) return;
+    setIsSteering(true);
+    try {
+      await steerSession(currentSession.id, steering.trim());
+      setSteering('');
+    } finally {
+      setIsSteering(false);
+    }
+  };
+
+  if (currentSession) {
+    const liveSession = sessions.find((session) => session.id === currentSession.id) || currentSession;
+    const budgetPct = Math.min(100, Math.round((liveSession.llmCallsUsed / liveSession.maxLlmCalls) * 100));
+
     return (
       <div className="space-y-6">
-        {/* Summary bar */}
         <div className="bg-da-surface border border-da-border-color rounded-[10px] p-4 flex items-center gap-4">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-da-text truncate">{currentSession.query}</p>
+            <p className="text-sm font-medium text-da-text truncate">{liveSession.query}</p>
             <p className="text-xs text-da-text-secondary mt-0.5">
-              Thread: {currentSession.threadId} · Model: {researchOptions.model}
+              Thread: {liveSession.threadId} · Model: {liveSession.model || researchOptions.model}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setSubmitted(false);
-                setCurrentSession(null);
-                setQuery('');
-                setThreadId('');
-                setLogs([]);
-                setProgress(0);
-              }}
-              className="text-sm text-da-text-secondary hover:text-da-text px-3 py-1.5 rounded-md hover:bg-da-surface-elevated transition-colors"
-            >
-              New Query
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setCurrentSession(null);
+              setQuery('');
+              setThreadId('');
+            }}
+            className="text-sm text-da-text-secondary hover:text-da-text px-3 py-1.5 rounded-md hover:bg-da-surface-elevated transition-colors"
+          >
+            New Query
+          </button>
         </div>
 
-        {/* Monitor layout */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Log Stream */}
-          <div className="lg:col-span-3">
-            <div className="flex items-center justify-between mb-3">
+          <div className="lg:col-span-3 space-y-4">
+            <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-da-text-secondary">Agent Activity Log</h3>
-              <span className="text-xs text-da-orange animate-pulse flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-da-orange rounded-full" />
-                Live
-              </span>
+              {liveSession.status === 'running' && (
+                <span className="text-xs text-da-orange animate-pulse flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-da-orange rounded-full" />
+                  Live
+                </span>
+              )}
             </div>
-            <LogStream logs={logs} maxHeight="600px" expanded />
+            <LogStream logs={liveSession.logs} maxHeight="520px" expanded />
+
+            {liveSession.status === 'running' && (
+              <div className="bg-da-surface border border-da-border-color rounded-[10px] p-4">
+                <label className="block text-sm font-medium text-da-text mb-2">Steer this run</label>
+                <div className="flex gap-2">
+                  <textarea
+                    value={steering}
+                    onChange={(e) => setSteering(e.target.value)}
+                    rows={2}
+                    placeholder="Add guidance for the next safe checkpoint..."
+                    className="flex-1 px-3 py-2 bg-da-surface-elevated border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange resize-none"
+                  />
+                  <button
+                    onClick={handleSteer}
+                    disabled={!steering.trim() || isSteering}
+                    className="w-11 rounded-lg bg-da-orange text-white flex items-center justify-center disabled:opacity-50"
+                  >
+                    {isSteering ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Progress */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-da-surface border border-da-border-color rounded-[10px] p-6">
-              <AgentPipeline activePhase={currentPhase} progress={progress} />
+              <AgentPipeline activePhase={liveSession.phase} progress={liveSession.progress} />
             </div>
 
-            {/* Phase status list */}
             <div className="bg-da-surface border border-da-border-color rounded-[10px] p-4 space-y-3">
-              {PHASES.slice(0, -1).map((phase, idx) => {
-                const isActive = phase === currentPhase;
-                const isCompleted = PHASES.indexOf(currentPhase) > idx;
-                const phaseNames: Record<string, string> = {
-                  planning: 'Planning research scope...',
-                  researching: 'Gathering sources...',
-                  auditing: 'Verifying credibility...',
-                  writing: 'Synthesizing report...',
-                  checking: 'Quality assurance...',
-                };
-                return (
-                  <div key={phase} className="flex items-center gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        isCompleted
-                          ? 'bg-da-success/10 text-da-success'
-                          : isActive
-                          ? 'bg-da-orange/10 text-da-orange'
-                          : 'bg-da-surface-elevated text-da-text-secondary/30'
-                      }`}
-                    >
-                      {isCompleted ? (
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      ) : (
-                        <span className="text-[10px]">{idx + 1}</span>
-                      )}
-                    </div>
-                    <span
-                      className={`text-sm ${
-                        isActive ? 'text-da-orange font-medium' : isCompleted ? 'text-da-success' : 'text-da-text-secondary/40'
-                      }`}
-                    >
-                      {phaseNames[phase]}
-                    </span>
-                  </div>
-                );
-              })}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-da-text-secondary">LLM calls</span>
+                <span className="font-medium text-da-text">
+                  {liveSession.llmCallsUsed}/{liveSession.maxLlmCalls}
+                </span>
+              </div>
+              <div className="h-2 bg-da-surface-elevated rounded-full overflow-hidden">
+                <div className="h-full bg-da-orange rounded-full" style={{ width: `${budgetPct}%` }} />
+              </div>
+              {liveSession.steeringInstructions.length > 0 && (
+                <div className="pt-3 border-t border-da-border-color space-y-2">
+                  <p className="text-xs font-semibold text-da-text-secondary uppercase tracking-wider">Steering</p>
+                  {liveSession.steeringInstructions.slice(-3).map((instruction) => (
+                    <p key={instruction.id} className="text-xs text-da-text-secondary">
+                      {instruction.consumed ? 'Consumed' : 'Queued'}: {instruction.message}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -240,45 +211,57 @@ export default function NewResearch() {
       <div className="text-center mb-10">
         <h1 className="font-display text-4xl text-da-text mb-3">New Research</h1>
         <p className="text-da-text-secondary text-base max-w-md mx-auto">
-          Describe what you want to investigate. The agent will plan, research, and synthesize a comprehensive report.
+          Describe what you want to investigate. The agent will plan, research, and synthesize a report.
         </p>
       </div>
 
       <div className="space-y-6">
-        {/* Thread ID */}
         <div>
           <label className="block text-sm font-medium text-da-text mb-2">
             Thread ID <span className="text-da-text-secondary font-normal">(optional)</span>
           </label>
           <input
+            list="existing-thread-ids"
             type="text"
             value={threadId}
             onChange={(e) => setThreadId(e.target.value)}
-            placeholder="e.g., browser-agent-research"
+            placeholder={existingThreadIds.length > 0 ? 'Select or type a thread ID' : 'e.g., browser-agent-research'}
             className="w-full h-12 px-4 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text placeholder:text-da-text-secondary/40 outline-none focus:border-da-orange focus:ring-2 focus:ring-da-orange/20 transition-all"
           />
-          <p className="text-xs text-da-text-secondary mt-1.5">
-            Use a stable thread ID to continue previous research context.
-          </p>
+          <datalist id="existing-thread-ids">
+            {existingThreadIds.map((id) => (
+              <option key={id} value={id} />
+            ))}
+          </datalist>
+          {existingThreadIds.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {existingThreadIds.slice(0, 6).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setThreadId(id)}
+                  className="max-w-full truncate rounded-md bg-da-surface-elevated px-2.5 py-1 text-xs text-da-text-secondary hover:bg-da-orange/10 hover:text-da-orange"
+                >
+                  {id}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Research Query */}
         <div>
           <label className="block text-sm font-medium text-da-text mb-2">Research Query</label>
           <textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Research the current state of open-source browser agents and write a report comparing their capabilities, limitations, and real-world use cases."
+            placeholder="Research the current state of open-source browser agents and compare their capabilities, limitations, and real-world use cases."
             rows={5}
             maxLength={2000}
             className="w-full px-4 py-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text placeholder:text-da-text-secondary/40 outline-none focus:border-da-orange focus:ring-2 focus:ring-da-orange/20 transition-all resize-none"
           />
-          <p className="text-xs text-da-text-secondary mt-1.5 text-right">
-            {query.length} / 2000
-          </p>
+          <p className="text-xs text-da-text-secondary mt-1.5 text-right">{query.length} / 2000</p>
         </div>
 
-        {/* Advanced Options */}
         <div>
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -296,48 +279,29 @@ export default function NewResearch() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="pt-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-da-text mb-2">Model</label>
-                      <select
-                        value={researchOptions.model}
-                        onChange={(e) => setResearchOptions({ model: e.target.value })}
-                        className="w-full h-10 px-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange"
-                      >
-                        <option value="deepseek-chat">deepseek-chat</option>
-                        <option value="deepseek-reasoner">deepseek-reasoner</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-da-text mb-2">Max Search Rounds</label>
-                      <input
-                        type="number"
-                        value={researchOptions.maxSearchRounds}
-                        onChange={(e) => setResearchOptions({ maxSearchRounds: parseInt(e.target.value) || 5 })}
-                        min={1}
-                        max={20}
-                        className="w-full h-10 px-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange"
-                      />
-                    </div>
+                <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-da-text mb-2">Model</label>
+                    <select
+                      value={researchOptions.model}
+                      onChange={(e) => setResearchOptions({ model: e.target.value })}
+                      className="w-full h-10 px-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange"
+                    >
+                      <option value="deepseek-chat">deepseek-chat</option>
+                      <option value="deepseek-reasoner">deepseek-reasoner</option>
+                      <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-da-text mb-2">Output Format</label>
-                    <div className="flex gap-3">
-                      {(['markdown', 'json'] as const).map((fmt) => (
-                        <button
-                          key={fmt}
-                          onClick={() => setResearchOptions({ outputFormat: fmt })}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            researchOptions.outputFormat === fmt
-                              ? 'bg-da-orange text-white'
-                              : 'bg-da-surface-elevated text-da-text-secondary hover:text-da-text'
-                          }`}
-                        >
-                          {fmt === 'markdown' ? 'Markdown Report' : 'Structured JSON'}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="block text-sm text-da-text mb-2">Max LLM Calls</label>
+                    <input
+                      type="number"
+                      value={researchOptions.maxLlmCalls}
+                      onChange={(e) => setResearchOptions({ maxLlmCalls: Math.max(1, parseInt(e.target.value) || 1) })}
+                      min={1}
+                      max={500}
+                      className="w-full h-10 px-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange"
+                    />
                   </div>
                 </div>
               </motion.div>
@@ -345,7 +309,6 @@ export default function NewResearch() {
           </AnimatePresence>
         </div>
 
-        {/* Submit */}
         <button
           onClick={handleSubmit}
           disabled={!query.trim() || isSubmitting}
@@ -354,7 +317,7 @@ export default function NewResearch() {
           {isSubmitting ? (
             <>
               <Loader2 size={16} className="animate-spin" />
-              Initializing Agent...
+              Starting Agent...
             </>
           ) : (
             <>
@@ -363,6 +326,17 @@ export default function NewResearch() {
             </>
           )}
         </button>
+        {(startMessage || startError) && (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              startError
+                ? 'border-da-error/30 bg-da-error/5 text-da-error'
+                : 'border-da-orange/30 bg-da-orange/5 text-da-orange'
+            }`}
+          >
+            {startError || startMessage}
+          </div>
+        )}
       </div>
     </div>
   );

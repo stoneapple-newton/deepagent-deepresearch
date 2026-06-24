@@ -1,6 +1,6 @@
 export type ResearchPhase = 'planning' | 'researching' | 'auditing' | 'writing' | 'checking' | 'completed' | 'failed';
 
-export type SessionStatus = 'running' | 'completed' | 'failed' | 'pending';
+export type SessionStatus = 'running' | 'completed' | 'failed' | 'pending' | 'budget_exhausted';
 
 export interface LogEntry {
   id: string;
@@ -24,9 +24,22 @@ export interface ResearchSession {
   sourceCount?: number;
   wordCount?: number;
   duration?: number;
+  model?: string;
+  maxLlmCalls: number;
+  llmCallsUsed: number;
   logs: LogEntry[];
   tags: string[];
   phaseTimes?: Record<ResearchPhase, number>;
+  steeringInstructions: SteeringInstruction[];
+  lastSteeringAt?: Date;
+}
+
+export interface SteeringInstruction {
+  id: string;
+  message: string;
+  createdAt: Date;
+  consumed: boolean;
+  consumedAt?: Date;
 }
 
 export interface AgentConfig {
@@ -48,6 +61,7 @@ export interface ResearchOptions {
   threadId?: string;
   model: string;
   maxSearchRounds: number;
+  maxLlmCalls: number;
   outputFormat: 'markdown' | 'json';
 }
 

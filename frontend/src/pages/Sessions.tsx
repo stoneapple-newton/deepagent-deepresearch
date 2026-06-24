@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import SessionCard from '@/components/SessionCard';
 import ReportViewer from '@/components/ReportViewer';
 import LogStream from '@/components/LogStream';
 import AgentPipeline from '@/components/AgentPipeline';
-import type { SessionStatus } from '@/types';
-import { Search, RefreshCw, X, FileText } from 'lucide-react';
+import { subscribeToSession } from '@/api/client';
+import type { LogEntry, ResearchSession, SessionStatus } from '@/types';
+import { Loader2, Search, RefreshCw, X, FileText, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -23,12 +24,74 @@ const sortOptions = [
 ];
 
 export default function Sessions() {
-  const { sessions, getSession } = useStore();
+  const { sessions, getSession, updateSession } = useStore();
+  const { loadSessions, steerSession } = useStore();
   const [filter, setFilter] = useState<SessionStatus | 'all'>('all');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewingReport, setViewingReport] = useState<string | null>(null);
   const [detailSession, setDetailSession] = useState<string | null>(null);
+  const [steering, setSteering] = useState('');
+  const [isSteering, setIsSteering] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const runningSessionIds = sessions
+    .filter((session) => session.status === 'running')
+    .map((session) => session.id)
+    .sort()
+    .join(',');
+
+  useEffect(() => {
+    loadSessions().catch(() => undefined);
+  }, [loadSessions]);
+
+  useEffect(() => {
+    const ids = runningSessionIds ? runningSessionIds.split(',') : [];
+    const unsubscribers = ids.map((sessionId) =>
+        subscribeToSession(sessionId, {
+          onPhase: (phase) => updateSession(sessionId, { phase: phase as ResearchSession['phase'] }),
+          onProgress: (progress) => updateSession(sessionId, { progress }),
+          onBudget: (payload) =>
+            updateSession(sessionId, {
+              llmCallsUsed: payload.llm_calls_used,
+              maxLlmCalls: payload.max_llm_calls,
+            }),
+          onLog: (log) => {
+            const entry: LogEntry = {
+              id: `live-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
+              agent: log.agent,
+              phase: log.phase as ResearchSession['phase'],
+              message: log.message,
+            };
+            updateSession(sessionId, {
+              logs: [...(useStore.getState().getSession(sessionId)?.logs || []), entry],
+            });
+          },
+          onCompleted: (payload) => {
+            updateSession(sessionId, {
+              status: 'completed',
+              phase: 'completed',
+              progress: 100,
+              sourceCount: payload.source_count,
+              wordCount: payload.word_count,
+              duration: payload.duration,
+            });
+            loadSessions().catch(() => undefined);
+          },
+          onError: (message) => {
+            updateSession(sessionId, {
+              status: message.toLowerCase().includes('budget') ? 'budget_exhausted' : 'failed',
+              phase: 'failed',
+            });
+          },
+          onSteering: () => loadSessions().catch(() => undefined),
+        })
+      );
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [loadSessions, runningSessionIds, updateSession]);
 
   const filtered = sessions
     .filter((s) => {
@@ -67,8 +130,18 @@ export default function Sessions() {
               className="h-9 pl-9 pr-4 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text placeholder:text-da-text-secondary/40 outline-none focus:border-da-orange w-52"
             />
           </div>
-          <button className="w-9 h-9 rounded-lg bg-da-surface border border-da-border-color flex items-center justify-center hover:bg-da-surface-elevated transition-colors">
-            <RefreshCw size={14} className="text-da-text-secondary" />
+          <button
+            onClick={async () => {
+              setIsRefreshing(true);
+              try {
+                await loadSessions();
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
+            className="w-9 h-9 rounded-lg bg-da-surface border border-da-border-color flex items-center justify-center hover:bg-da-surface-elevated transition-colors"
+          >
+            <RefreshCw size={14} className={`text-da-text-secondary ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -193,6 +266,47 @@ export default function Sessions() {
                 )}
 
                 {/* Actions */}
+                {selectedSession.status === 'running' && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-da-text-secondary uppercase tracking-wider mb-3">Steering</h3>
+                    <div className="space-y-2">
+                      <textarea
+                        value={steering}
+                        onChange={(e) => setSteering(e.target.value)}
+                        rows={3}
+                        placeholder="Add guidance for the next checkpoint..."
+                        className="w-full px-3 py-2 bg-da-surface-elevated border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange resize-none"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!steering.trim()) return;
+                          setIsSteering(true);
+                          try {
+                            await steerSession(selectedSession.id, steering.trim());
+                            setSteering('');
+                          } finally {
+                            setIsSteering(false);
+                          }
+                        }}
+                        disabled={!steering.trim() || isSteering}
+                        className="w-full flex items-center justify-center gap-2 bg-da-orange text-white py-2.5 rounded-md text-sm font-medium disabled:opacity-50"
+                      >
+                        {isSteering ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                        Send Guidance
+                      </button>
+                    </div>
+                    {selectedSession.steeringInstructions.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {selectedSession.steeringInstructions.slice(-3).map((instruction) => (
+                          <p key={instruction.id} className="text-xs text-da-text-secondary">
+                            {instruction.consumed ? 'Consumed' : 'Queued'}: {instruction.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {selectedSession.status === 'completed' && selectedSession.report && (
                   <button
                     onClick={() => {

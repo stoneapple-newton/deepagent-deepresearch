@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Download, ChevronLeft, ChevronRight, X, Menu } from 'lucide-react';
+import { Copy, Download, ChevronLeft, ChevronRight, X, Menu, GitBranch } from 'lucide-react';
 import type { ResearchSession } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -97,6 +97,10 @@ export default function ReportViewer({ session, onClose, onPrev, onNext }: Repor
               {session.wordCount.toLocaleString()} words
             </span>
           )}
+          <span className="hidden md:flex min-w-0 items-center gap-1.5 text-xs text-da-text-secondary bg-da-surface-elevated px-2 py-0.5 rounded-full">
+            <GitBranch size={12} className="flex-shrink-0" />
+            <span className="truncate max-w-48">Report thread: {session.threadId}</span>
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {onPrev && (

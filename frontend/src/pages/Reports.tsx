@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import ReportViewer from '@/components/ReportViewer';
 import type { ResearchSession } from '@/types';
-import { Search, FileText, Calendar, BookOpen } from 'lucide-react';
+import { Search, FileText, Calendar, BookOpen, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 
 const categories = ['All Topics', 'Technology', 'Science', 'Business', 'Society'];
@@ -158,6 +158,10 @@ export default function Reports() {
                 <h3 className="text-base font-semibold text-da-text mb-2 line-clamp-2 group-hover:text-da-orange transition-colors">
                   {session.query}
                 </h3>
+                <div className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-md bg-da-surface-elevated px-2 py-1 text-xs text-da-text-secondary">
+                  <GitBranch size={12} className="flex-shrink-0" />
+                  <span className="truncate">Report thread: {session.threadId}</span>
+                </div>
 
                 <div className="flex items-center gap-3 text-xs text-da-text-secondary">
                   <span className="flex items-center gap-1">
