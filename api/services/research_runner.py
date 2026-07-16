@@ -11,10 +11,12 @@ from pathlib import Path
 
 from sqlmodel import Session, desc, select
 
-from agents.deep_research import LlmBudgetExceeded, run_research
+from agents.deep_research import ResearchBudgetExceeded, run_research
 from api.database import engine
 from api.models import LogEntry, ResearchSession
 from api.services import broadcaster
+from core.research_profiles import ResearchProfile, get_research_profile
+from langgraph.errors import GraphRecursionError
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="research-")
 
@@ -42,16 +44,35 @@ def _add_log(db: Session, session_id: str, agent: str, phase: str, message: str)
     db.add(log)
 
 
-def _record_budget_usage(session_id: str, used: int, max_calls: int) -> None:
+def _record_budget_usage(
+    session_id: str,
+    kind: str,
+    used: int,
+    max_calls: int,
+) -> dict[str, int]:
+    fields = {
+        "llm": ("llm_calls_used", "max_llm_calls"),
+        "search": ("search_calls_used", "max_search_calls"),
+        "subagent": ("subagent_calls_used", "max_subagent_calls"),
+    }
+    used_field, max_field = fields[kind]
     with Session(engine) as db:
         session = db.get(ResearchSession, session_id)
         if session is None:
-            return
-        session.llm_calls_used = used
-        session.max_llm_calls = max_calls
+            return {}
+        setattr(session, used_field, used)
+        setattr(session, max_field, max_calls)
         session.updated_at = datetime.utcnow()
         db.add(session)
         db.commit()
+        return {
+            "llm_calls_used": session.llm_calls_used,
+            "max_llm_calls": session.max_llm_calls,
+            "search_calls_used": session.search_calls_used,
+            "max_search_calls": session.max_search_calls,
+            "subagent_calls_used": session.subagent_calls_used,
+            "max_subagent_calls": session.max_subagent_calls,
+        }
 
 
 def _consume_steering(session_id: str) -> str:
@@ -195,7 +216,8 @@ async def start_research(
     query: str,
     thread_id: str,
     *,
-    max_llm_calls: int,
+    max_llm_calls: int | None = None,
+    profile: ResearchProfile | None = None,
     model_name: str | None = None,
     resume: bool = False,
     previous_status: str | None = None,
@@ -203,6 +225,10 @@ async def start_research(
 ) -> None:
     """Run research in the background and emit SSE events."""
     start_time = time.time()
+    profile = profile or get_research_profile()
+    if max_llm_calls is not None and max_llm_calls != profile.max_llm_calls:
+        profile = profile.model_copy(update={"max_llm_calls": max(1, max_llm_calls)})
+    max_llm_calls = profile.max_llm_calls
 
     with Session(engine) as db:
         session = db.get(ResearchSession, session_id)
@@ -213,7 +239,14 @@ async def start_research(
         session.phase = "planning"
         session.progress = 0
         session.llm_calls_used = 0
-        session.max_llm_calls = max_llm_calls
+        session.search_calls_used = 0
+        session.subagent_calls_used = 0
+        session.research_profile = profile.id
+        session.max_llm_calls = profile.max_llm_calls
+        session.max_search_calls = profile.max_search_calls
+        session.max_subagent_calls = profile.max_subagent_calls
+        session.max_research_rounds = profile.max_research_rounds
+        session.recursion_limit = profile.recursion_limit
         session.model = model_name or session.model
         session.updated_at = datetime.utcnow()
         db.add(session)
@@ -255,13 +288,13 @@ async def start_research(
     try:
         loop = asyncio.get_running_loop()
 
-        def on_budget_usage(used: int, max_calls: int) -> None:
-            _record_budget_usage(session_id, used, max_calls)
+        def on_budget_usage(kind: str, used: int, max_calls: int) -> None:
+            usage = _record_budget_usage(session_id, kind, used, max_calls)
             loop.call_soon_threadsafe(
                 asyncio.create_task,
                 broadcaster.emit(
                     session_id,
-                    {"type": "budget", "llm_calls_used": used, "max_llm_calls": max_calls},
+                    {"type": "budget", "kind": kind, **usage},
                 ),
             )
 
@@ -281,7 +314,7 @@ async def start_research(
                 run_query,
                 thread_id=thread_id,
                 model_name=model_name,
-                max_llm_calls=max_llm_calls,
+                profile=profile,
                 on_budget_usage=on_budget_usage,
                 steering_reader=lambda: _consume_steering(session_id),
             ),
@@ -328,7 +361,7 @@ async def start_research(
                 "duration": duration,
             },
         )
-    except LlmBudgetExceeded as exc:
+    except (ResearchBudgetExceeded, GraphRecursionError) as exc:
         with Session(engine) as db:
             session = db.get(ResearchSession, session_id)
             if session is None:
@@ -341,7 +374,7 @@ async def start_research(
                 session_id,
                 "deep_research_agent",
                 "failed",
-                f"Research stopped because the LLM budget was exhausted: {exc!s}",
+                f"Research stopped because a profile limit was exhausted: {exc!s}",
             )
             db.add(session)
             db.commit()

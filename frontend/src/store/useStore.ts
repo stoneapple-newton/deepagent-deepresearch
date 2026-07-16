@@ -7,6 +7,7 @@ import type {
   PageView,
   ResearchOptions,
   ResearchPhase,
+  ResearchProfile,
   ResearchSession,
   SteeringInstruction,
 } from '@/types';
@@ -42,8 +43,15 @@ interface ApiResearchSession {
   word_count?: number;
   duration?: number;
   model?: string;
+  research_profile: string;
   max_llm_calls: number;
   llm_calls_used: number;
+  max_search_calls: number;
+  search_calls_used: number;
+  max_subagent_calls: number;
+  subagent_calls_used: number;
+  max_research_rounds: number;
+  recursion_limit: number;
   logs: ApiLogEntry[];
   tags: string[];
   phase_times?: Record<ResearchPhase, number>;
@@ -66,6 +74,23 @@ interface ApiAgentConfig {
   tools: string[];
 }
 
+interface ApiResearchProfile {
+  id: string;
+  label: string;
+  description: string;
+  max_llm_calls: number;
+  max_search_calls: number;
+  max_subagent_calls: number;
+  max_research_rounds: number;
+  recursion_limit: number;
+}
+
+interface ApiResearchProfileCatalog {
+  version: number;
+  default_profile: string;
+  profiles: ApiResearchProfile[];
+}
+
 interface AppState {
   currentPage: PageView;
   setCurrentPage: (page: PageView) => void;
@@ -76,7 +101,7 @@ interface AppState {
     query: string;
     threadId?: string;
     model?: string;
-    maxLlmCalls: number;
+    researchProfile: string;
     tags?: string[];
   }) => Promise<ResearchSession>;
   continueSession: (id: string) => Promise<ResearchSession>;
@@ -99,6 +124,8 @@ interface AppState {
 
   researchOptions: ResearchOptions;
   setResearchOptions: (options: Partial<ResearchOptions>) => void;
+  researchProfiles: ResearchProfile[];
+  loadResearchProfiles: () => Promise<void>;
 
   isSidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -146,8 +173,15 @@ export function mapSession(session: ApiResearchSession): ResearchSession {
     wordCount: session.word_count,
     duration: session.duration,
     model: session.model,
+    researchProfile: session.research_profile,
     maxLlmCalls: session.max_llm_calls,
     llmCallsUsed: session.llm_calls_used,
+    maxSearchCalls: session.max_search_calls,
+    searchCallsUsed: session.search_calls_used,
+    maxSubagentCalls: session.max_subagent_calls,
+    subagentCallsUsed: session.subagent_calls_used,
+    maxResearchRounds: session.max_research_rounds,
+    recursionLimit: session.recursion_limit,
     logs: (session.logs || []).map(mapLog),
     tags: session.tags || [],
     phaseTimes: session.phase_times,
@@ -170,6 +204,19 @@ function mapAgent(agent: ApiAgentConfig): AgentConfig {
     successRate: agent.success_rate,
     totalInvocations: agent.total_invocations,
     tools: agent.tools,
+  };
+}
+
+function mapResearchProfile(profile: ApiResearchProfile): ResearchProfile {
+  return {
+    id: profile.id,
+    label: profile.label,
+    description: profile.description,
+    maxLlmCalls: profile.max_llm_calls,
+    maxSearchCalls: profile.max_search_calls,
+    maxSubagentCalls: profile.max_subagent_calls,
+    maxResearchRounds: profile.max_research_rounds,
+    recursionLimit: profile.recursion_limit,
   };
 }
 
@@ -203,7 +250,7 @@ export const useStore = create<AppState>((set, get) => ({
       query: payload.query,
       thread_id: payload.threadId || undefined,
       model: payload.model || undefined,
-      max_llm_calls: payload.maxLlmCalls,
+      research_profile: payload.researchProfile,
       tags: payload.tags || [],
     });
     const mapped = mapSession(session);
@@ -277,14 +324,27 @@ export const useStore = create<AppState>((set, get) => ({
 
   researchOptions: {
     model: 'deepseek-chat',
-    maxSearchRounds: 5,
-    maxLlmCalls: 40,
+    researchProfile: 'standard',
     outputFormat: 'markdown',
   },
   setResearchOptions: (options: Partial<ResearchOptions>) =>
     set((state) => ({
       researchOptions: { ...state.researchOptions, ...options },
     })),
+  researchProfiles: [],
+  loadResearchProfiles: async () => {
+    const catalog = await api.get<ApiResearchProfileCatalog>('/research-profiles');
+    set((state) => ({
+      researchProfiles: catalog.profiles.map(mapResearchProfile),
+      researchOptions: {
+        ...state.researchOptions,
+        researchProfile:
+          catalog.profiles.some((profile) => profile.id === state.researchOptions.researchProfile)
+            ? state.researchOptions.researchProfile
+            : catalog.default_profile,
+      },
+    }));
+  },
 
   isSidebarOpen: true,
   setSidebarOpen: (open: boolean) => set({ isSidebarOpen: open }),

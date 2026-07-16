@@ -1,0 +1,32 @@
+version: 1
+default_profile: standard
+
+# This file is re-read whenever profiles are requested or a new session starts.
+# Existing sessions keep a snapshot of the limits they started with.
+profiles:
+  - id: quick
+    label: Quick
+    description: Fast orientation with a small number of focused searches.
+    max_llm_calls: 12
+    max_search_calls: 4
+    max_subagent_calls: 2
+    max_research_rounds: 1
+    recursion_limit: 40
+
+  - id: standard
+    label: Standard
+    description: Balanced coverage, verification, and report quality.
+    max_llm_calls: 25
+    max_search_calls: 10
+    max_subagent_calls: 4
+    max_research_rounds: 2
+    recursion_limit: 80
+
+  - id: deep
+    label: Deep
+    description: Broad research with additional gap-filling and source auditing.
+    max_llm_calls: 40
+    max_search_calls: 18
+    max_subagent_calls: 7
+    max_research_rounds: 3
+    recursion_limit: 140

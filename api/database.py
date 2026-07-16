@@ -1,5 +1,5 @@
 from sqlalchemy import inspect, text
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import SQLModel, create_engine
 
 from core.config import settings
 
@@ -25,6 +25,13 @@ def _add_missing_sqlite_columns() -> None:
         "model": "VARCHAR",
         "max_llm_calls": "INTEGER DEFAULT 40 NOT NULL",
         "llm_calls_used": "INTEGER DEFAULT 0 NOT NULL",
+        "research_profile": "VARCHAR DEFAULT 'standard' NOT NULL",
+        "max_search_calls": "INTEGER DEFAULT 10 NOT NULL",
+        "search_calls_used": "INTEGER DEFAULT 0 NOT NULL",
+        "max_subagent_calls": "INTEGER DEFAULT 4 NOT NULL",
+        "subagent_calls_used": "INTEGER DEFAULT 0 NOT NULL",
+        "max_research_rounds": "INTEGER DEFAULT 2 NOT NULL",
+        "recursion_limit": "INTEGER DEFAULT 80 NOT NULL",
         "steering_instructions": "JSON DEFAULT '[]' NOT NULL",
         "last_steering_at": "DATETIME",
     }

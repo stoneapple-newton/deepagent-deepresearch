@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     langsmith_api_key: str
     langsmith_project: str = "deepagent_demo"
     database_url: str = "sqlite:///deepagent.db"
+    research_profiles_path: str = "research_profiles.yaml"
 
 
 settings = Settings()

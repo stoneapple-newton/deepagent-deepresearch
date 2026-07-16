@@ -19,6 +19,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_THREAD_ID,
         help="Conversation thread id for Deep Agents state.",
     )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Research profile id from research_profiles.yaml (defaults to catalog default).",
+    )
     return parser.parse_args()
 
 
@@ -26,7 +31,7 @@ def main() -> None:
     args = parse_args()
     query = " ".join(args.query).strip() or DEFAULT_RESEARCH_QUERY
 
-    print(run_research(query, thread_id=args.thread_id))
+    print(run_research(query, thread_id=args.thread_id, profile_id=args.profile))
 
 
 if __name__ == "__main__":

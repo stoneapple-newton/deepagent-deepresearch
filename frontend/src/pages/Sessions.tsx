@@ -55,6 +55,10 @@ export default function Sessions() {
             updateSession(sessionId, {
               llmCallsUsed: payload.llm_calls_used,
               maxLlmCalls: payload.max_llm_calls,
+              searchCallsUsed: payload.search_calls_used,
+              maxSearchCalls: payload.max_search_calls,
+              subagentCallsUsed: payload.subagent_calls_used,
+              maxSubagentCalls: payload.max_subagent_calls,
             }),
           onLog: (log) => {
             const entry: LogEntry = {

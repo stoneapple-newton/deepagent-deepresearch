@@ -61,7 +61,8 @@ export default function ReportViewer({ session, onClose, onPrev, onNext }: Repor
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `report-${session.id}.md`;
+      const filename = `${session.threadId || session.id}.md`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
     }

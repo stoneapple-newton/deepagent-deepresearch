@@ -11,8 +11,33 @@ from api import schemas
 from api.deps import get_session as get_db_session
 from api.models import LogEntry, ResearchSession
 from api.services import broadcaster, research_runner
+from core.research_profiles import (
+    ResearchProfile,
+    ResearchProfileError,
+    load_research_profiles,
+)
 
 router = APIRouter(prefix="/api")
+
+
+def _load_catalog():
+    try:
+        return load_research_profiles()
+    except ResearchProfileError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _profile_from_session(session: ResearchSession) -> ResearchProfile:
+    return ResearchProfile(
+        id=session.research_profile,
+        label=session.research_profile.replace("_", " ").title(),
+        description="Persisted research-session profile snapshot.",
+        max_llm_calls=session.max_llm_calls,
+        max_search_calls=session.max_search_calls,
+        max_subagent_calls=session.max_subagent_calls,
+        max_research_rounds=session.max_research_rounds,
+        recursion_limit=session.recursion_limit,
+    )
 
 
 def _to_response(db: Session, session: ResearchSession) -> schemas.ResearchSessionResponse:
@@ -36,10 +61,26 @@ def list_sessions(db: Session = Depends(get_db_session)) -> list[schemas.Researc
     return [_to_response(db, s) for s in sessions]
 
 
+@router.get("/research-profiles")
+def get_research_profiles() -> schemas.ResearchProfileCatalogResponse:
+    catalog = _load_catalog()
+    return schemas.ResearchProfileCatalogResponse.model_validate(catalog.model_dump())
+
+
 @router.post("/sessions")
 async def create_session(
     payload: schemas.ResearchSessionCreate, db: Session = Depends(get_db_session)
 ) -> schemas.ResearchSessionResponse:
+    catalog = _load_catalog()
+    try:
+        profile = catalog.get(payload.research_profile)
+    except KeyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if payload.max_llm_calls is not None:
+        profile = profile.model_copy(
+            update={"max_llm_calls": max(1, payload.max_llm_calls)}
+        )
+
     session_id = uuid.uuid4().hex
     thread_id = payload.thread_id or f"thread-{session_id}"
     session = ResearchSession(
@@ -47,7 +88,12 @@ async def create_session(
         thread_id=thread_id,
         query=payload.query,
         model=payload.model,
-        max_llm_calls=max(1, payload.max_llm_calls),
+        research_profile=profile.id,
+        max_llm_calls=profile.max_llm_calls,
+        max_search_calls=profile.max_search_calls,
+        max_subagent_calls=profile.max_subagent_calls,
+        max_research_rounds=profile.max_research_rounds,
+        recursion_limit=profile.recursion_limit,
         status="running",
         phase="planning",
         progress=0,
@@ -63,7 +109,8 @@ async def create_session(
             session_id,
             payload.query,
             thread_id,
-            max_llm_calls=max(1, payload.max_llm_calls),
+            max_llm_calls=profile.max_llm_calls,
+            profile=profile,
             model_name=payload.model,
         )
     )
@@ -134,12 +181,15 @@ async def continue_session(
 
     previous_status = session.status
     previous_llm_calls = session.llm_calls_used
-    max_llm_calls = max(1, payload.max_llm_calls) if payload and payload.max_llm_calls else session.max_llm_calls
+    profile = _profile_from_session(session)
+    max_llm_calls = profile.max_llm_calls
 
     session.status = "running"
     session.phase = "planning"
     session.progress = 0
     session.llm_calls_used = 0
+    session.search_calls_used = 0
+    session.subagent_calls_used = 0
     session.max_llm_calls = max_llm_calls
     session.completed_at = None
     session.updated_at = datetime.utcnow()
@@ -168,6 +218,7 @@ async def continue_session(
             session.query,
             session.thread_id,
             max_llm_calls=max_llm_calls,
+            profile=profile,
             model_name=session.model,
             resume=True,
             previous_status=previous_status,

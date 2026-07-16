@@ -53,6 +53,90 @@
   }
 }
 
+/* Dark mode overrides */
+html[data-theme="dark"] {
+  --background: 0 0% 8%;
+  --foreground: 45 8% 95%;
+  --card: 0 0% 10%;
+  --card-foreground: 45 8% 95%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 45 8% 95%;
+  --primary: 24 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 45 8% 95%;
+  --muted: 0 0% 14%;
+  --muted-foreground: 45 8% 65%;
+  --accent: 24 100% 50%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 4 60% 50%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 24 100% 50%;
+  --sidebar-background: 0 0% 10%;
+  --sidebar-foreground: 45 8% 70%;
+  --sidebar-primary: 24 100% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 24 100% 15%;
+  --sidebar-accent-foreground: 24 100% 50%;
+  --sidebar-border: 0 0% 20%;
+  --sidebar-ring: 24 100% 50%;
+}
+
+html[data-theme="dark"] body {
+  background-color: #0a0a0a;
+  color: #f4f4f2;
+}
+
+html[data-theme="dark"] .report-content h1 {
+  color: #f4f4f2;
+  border-bottom-color: #333;
+}
+
+html[data-theme="dark"] .report-content h2 {
+  color: #ff7a1a;
+}
+
+html[data-theme="dark"] .report-content h3 {
+  color: #f4f4f2;
+}
+
+html[data-theme="dark"] .report-content p {
+  color: #e0e0e0;
+}
+
+html[data-theme="dark"] .report-content code {
+  background: #2a2a2a;
+  color: #f4f4f2;
+}
+
+html[data-theme="dark"] .report-content pre {
+  background: #2a2a2a;
+}
+
+html[data-theme="dark"] .report-content blockquote {
+  color: #aaa;
+}
+
+html[data-theme="dark"] .report-content th,
+html[data-theme="dark"] .report-content td {
+  border-color: #333;
+}
+
+html[data-theme="dark"] .report-content th,
+html[data-theme="dark"] .report-content tr:nth-child(even) {
+  background: #1a1a1a;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #444;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

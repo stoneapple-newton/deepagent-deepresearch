@@ -65,7 +65,9 @@ class ResearchSessionBase(BaseModel):
     query: str
     thread_id: str | None = None
     model: str | None = None
-    max_llm_calls: int = 40
+    research_profile: str | None = None
+    # Backward-compatible one-off override. Prefer editing research_profiles.yaml.
+    max_llm_calls: int | None = None
 
 
 class ResearchSessionCreate(ResearchSessionBase):
@@ -73,7 +75,24 @@ class ResearchSessionCreate(ResearchSessionBase):
 
 
 class ResearchSessionContinue(BaseModel):
-    max_llm_calls: int | None = None
+    pass
+
+
+class ResearchProfileResponse(BaseModel):
+    id: str
+    label: str
+    description: str
+    max_llm_calls: int
+    max_search_calls: int
+    max_subagent_calls: int
+    max_research_rounds: int
+    recursion_limit: int
+
+
+class ResearchProfileCatalogResponse(BaseModel):
+    version: int
+    default_profile: str
+    profiles: list[ResearchProfileResponse]
 
 
 class ResearchSessionUpdate(BaseModel):
@@ -89,6 +108,8 @@ class ResearchSessionUpdate(BaseModel):
     tags: list[str] | None = None
     phase_times: dict[str, Any] | None = None
     llm_calls_used: int | None = None
+    search_calls_used: int | None = None
+    subagent_calls_used: int | None = None
     steering_instructions: list[dict[str, Any]] | None = None
     last_steering_at: datetime | None = None
 
@@ -114,8 +135,15 @@ class ResearchSessionResponse(BaseModel):
     word_count: int | None = None
     duration: int | None = None
     model: str | None = None
-    max_llm_calls: int = 40
+    research_profile: str = "standard"
+    max_llm_calls: int = 25
     llm_calls_used: int = 0
+    max_search_calls: int = 10
+    search_calls_used: int = 0
+    max_subagent_calls: int = 4
+    subagent_calls_used: int = 0
+    max_research_rounds: int = 2
+    recursion_limit: int = 80
     logs: list[LogEntryResponse] = []
     tags: list[str] = []
     phase_times: dict[str, Any] | None = None

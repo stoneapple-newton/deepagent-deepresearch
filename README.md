@@ -63,6 +63,28 @@ Use a stable thread id to continue the same research context:
 uv run python main.py --thread-id browser-agent-research "Continue the previous report with risks and limitations."
 ```
 
+## Research depth profiles
+
+Research limits live in [`research_profiles.yaml`](research_profiles.yaml). The
+backend re-reads this file when the UI requests profiles and whenever a new
+session starts, so edits do not require a backend restart. Each session stores a
+snapshot of its selected limits so later YAML edits do not change a run already
+in progress.
+
+Each profile controls:
+
+- aggregate LLM, Tavily search, and subagent-call budgets;
+- the maximum semantic research rounds included in the agent instructions; and
+- the LangGraph recursion limit used as a final execution ceiling.
+
+Select a profile in the New Research screen or from the CLI:
+
+```bash
+uv run python main.py --profile quick "Summarize current LangGraph deployment options."
+```
+
+Set `RESEARCH_PROFILES_PATH` to use a YAML file outside the project root.
+
 ## Evaluate a report
 
 The evaluation v1 is offline and deterministic. It does not call Tavily,
@@ -78,6 +100,7 @@ By default, evaluations append JSONL records to
 ## Key files
 
 - `agents/deep_research.py`: Deep Agents factory, prompts, and subagents.
+- `research_profiles.yaml`: Editable quick, standard, and deep execution limits.
 - `evaluation/`: Deterministic report evaluator and JSONL logging helpers.
 - `evaluate_report.py`: CLI for evaluating saved Markdown reports.
 - `tools/search.py`: Tavily search tool with recency and domain filters.

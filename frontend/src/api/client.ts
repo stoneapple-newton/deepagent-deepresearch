@@ -11,7 +11,7 @@ export interface ApiError {
   message: string;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function requestWithRetry<T>(method: string, path: string, body?: unknown, attempt = 1): Promise<T> {
   const base = getBaseUrl();
   const url = `${base}${path}`;
   const options: RequestInit = {
@@ -25,13 +25,35 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, options);
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+  } catch (err) {
+    throw new Error('Network error — unable to reach the server. Is it running?');
+  }
+
   if (!response.ok) {
+    const status = response.status;
     const text = await response.text().catch(() => 'Unknown error');
-    const error: ApiError = {
-      status: response.status,
-      message: text || `HTTP ${response.status} error`,
-    };
+
+    // Retry 5xx once after 1s
+    if (status >= 500 && status < 600 && attempt === 1) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return requestWithRetry<T>(method, path, body, attempt + 1);
+    }
+
+    let message: string;
+    if (status === 400) message = `Bad request: ${text}`;
+    else if (status === 401) message = 'Unauthorized — please check your API credentials.';
+    else if (status === 403) message = 'Forbidden — you do not have permission.';
+    else if (status === 404) message = 'Not found — the requested resource does not exist.';
+    else if (status === 409) message = `Conflict: ${text}`;
+    else if (status === 422) message = `Validation error: ${text}`;
+    else if (status === 429) message = 'Too many requests — please slow down.';
+    else if (status >= 500) message = `Server error (${status}): ${text}`;
+    else message = `HTTP ${status} error: ${text}`;
+
+    const error: ApiError = { status, message };
     console.error(`API ${method} ${path} failed:`, error);
     throw error;
   }
@@ -45,17 +67,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
-  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
-  delete: <T>(path: string) => request<T>('DELETE', path),
+  get: <T>(path: string) => requestWithRetry<T>('GET', path),
+  post: <T>(path: string, body?: unknown) => requestWithRetry<T>('POST', path, body),
+  put: <T>(path: string, body?: unknown) => requestWithRetry<T>('PUT', path, body),
+  delete: <T>(path: string) => requestWithRetry<T>('DELETE', path),
 };
 
 export interface SessionSSEHandlers {
   onPhase?: (phase: string) => void;
   onLog?: (log: { agent: string; phase: string; message: string; timestamp?: string }) => void;
   onProgress?: (progress: number) => void;
-  onBudget?: (payload: { llm_calls_used: number; max_llm_calls: number }) => void;
+  onBudget?: (payload: {
+    kind: 'llm' | 'search' | 'subagent';
+    llm_calls_used: number;
+    max_llm_calls: number;
+    search_calls_used: number;
+    max_search_calls: number;
+    subagent_calls_used: number;
+    max_subagent_calls: number;
+  }) => void;
   onSteering?: (payload: { instruction: unknown }) => void;
   onCompleted?: (payload: { report?: string; report_summary?: string; source_count?: number; word_count?: number; duration?: number }) => void;
   onError?: (message: string) => void;

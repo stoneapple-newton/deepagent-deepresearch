@@ -16,6 +16,8 @@ export default function NewResearch() {
     setResearchOptions,
     steerSession,
     loadSessions,
+    loadResearchProfiles,
+    researchProfiles,
     activeSessionId,
   } = useStore();
   const [query, setQuery] = useState('');
@@ -31,6 +33,16 @@ export default function NewResearch() {
   const existingThreadIds = Array.from(
     new Set(sessions.map((session) => session.threadId).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
+  const selectedProfile = researchProfiles.find(
+    (profile) => profile.id === researchOptions.researchProfile
+  );
+
+  useEffect(() => {
+    loadResearchProfiles().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Failed to load research profiles.';
+      setStartError(message);
+    });
+  }, [loadResearchProfiles]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -52,6 +64,10 @@ export default function NewResearch() {
         updateSession(currentSession.id, {
           llmCallsUsed: payload.llm_calls_used,
           maxLlmCalls: payload.max_llm_calls,
+          searchCallsUsed: payload.search_calls_used,
+          maxSearchCalls: payload.max_search_calls,
+          subagentCallsUsed: payload.subagent_calls_used,
+          maxSubagentCalls: payload.max_subagent_calls,
         }),
       onLog: (log) => {
         const entry: LogEntry = {
@@ -99,7 +115,7 @@ export default function NewResearch() {
         query: query.trim(),
         threadId: threadId.trim() || undefined,
         model: researchOptions.model,
-        maxLlmCalls: researchOptions.maxLlmCalls,
+        researchProfile: researchOptions.researchProfile,
       });
       setActiveSessionId(session.id);
       setCurrentSession(session);
@@ -134,7 +150,7 @@ export default function NewResearch() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-da-text truncate">{liveSession.query}</p>
             <p className="text-xs text-da-text-secondary mt-0.5">
-              Thread: {liveSession.threadId} · Model: {liveSession.model || researchOptions.model}
+              Thread: {liveSession.threadId} · Model: {liveSession.model || researchOptions.model} · Profile: {liveSession.researchProfile}
             </p>
           </div>
           <button
@@ -200,6 +216,23 @@ export default function NewResearch() {
               <div className="h-2 bg-da-surface-elevated rounded-full overflow-hidden">
                 <div className="h-full bg-da-orange rounded-full" style={{ width: `${budgetPct}%` }} />
               </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="rounded-md bg-da-surface-elevated px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wider text-da-text-secondary">Searches</p>
+                  <p className="mt-1 text-sm font-medium text-da-text">
+                    {liveSession.searchCallsUsed}/{liveSession.maxSearchCalls}
+                  </p>
+                </div>
+                <div className="rounded-md bg-da-surface-elevated px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wider text-da-text-secondary">Delegations</p>
+                  <p className="mt-1 text-sm font-medium text-da-text">
+                    {liveSession.subagentCallsUsed}/{liveSession.maxSubagentCalls}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-da-text-secondary">
+                Up to {liveSession.maxResearchRounds} research round{liveSession.maxResearchRounds === 1 ? '' : 's'} · {liveSession.recursionLimit} graph steps
+              </p>
               {liveSession.steeringInstructions.length > 0 && (
                 <div className="pt-3 border-t border-da-border-color space-y-2">
                   <p className="text-xs font-semibold text-da-text-secondary uppercase tracking-wider">Steering</p>
@@ -274,6 +307,47 @@ export default function NewResearch() {
         </div>
 
         <div>
+          <div className="flex items-end justify-between gap-4 mb-2">
+            <label className="block text-sm font-medium text-da-text">Research depth</label>
+            <span className="text-[11px] text-da-text-secondary">Loaded from research_profiles.yaml</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {researchProfiles.map((profile) => {
+              const active = profile.id === researchOptions.researchProfile;
+              return (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onClick={() => setResearchOptions({ researchProfile: profile.id })}
+                  className={`rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-da-orange/50 ${
+                    active
+                      ? 'border-da-orange bg-da-orange/10 shadow-[inset_0_0_0_1px_rgba(255,122,0,0.18)]'
+                      : 'border-da-border-color bg-da-surface hover:border-da-text-secondary/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-sm font-semibold ${active ? 'text-da-orange' : 'text-da-text'}`}>
+                      {profile.label}
+                    </span>
+                    <span className="font-mono text-[10px] text-da-text-secondary">
+                      {profile.maxResearchRounds}R
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-4 text-da-text-secondary">
+                    {profile.maxLlmCalls} calls · {profile.maxSearchCalls} searches · {profile.maxSubagentCalls} delegates
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {selectedProfile && (
+            <p className="mt-2 text-xs leading-5 text-da-text-secondary">
+              {selectedProfile.description} Up to {selectedProfile.recursionLimit} graph steps.
+            </p>
+          )}
+        </div>
+
+        <div>
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-2 text-sm text-da-text-secondary hover:text-da-text transition-colors"
@@ -290,7 +364,7 @@ export default function NewResearch() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="pt-4 grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-sm text-da-text mb-2">Model</label>
                     <select
@@ -302,17 +376,6 @@ export default function NewResearch() {
                       <option value="deepseek-reasoner">deepseek-reasoner</option>
                       <option value="deepseek-v4-pro">deepseek-v4-pro</option>
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-da-text mb-2">Max LLM Calls</label>
-                    <input
-                      type="number"
-                      value={researchOptions.maxLlmCalls}
-                      onChange={(e) => setResearchOptions({ maxLlmCalls: Math.max(1, parseInt(e.target.value) || 1) })}
-                      min={1}
-                      max={500}
-                      className="w-full h-10 px-3 bg-da-surface border border-da-border-color rounded-lg text-sm text-da-text outline-none focus:border-da-orange"
-                    />
                   </div>
                 </div>
               </motion.div>
